@@ -25,6 +25,7 @@ open System.Net.Http.Headers
 open Newtonsoft.Json.Linq
 open System.Threading.Tasks
 open Channels
+open Microsoft.AspNetCore.Builder.Internal
 
 [<AutoOpen>]
 module Application =
@@ -44,7 +45,7 @@ module Application =
 
   let private addCookie state (c : AuthenticationBuilder) = if not state.CookiesAlreadyAdded then c.AddCookie() |> ignore
 
-  type ApplicationBuilder internal () =
+  type ApplicationBuilder internal (?webHostBuilder:IWebHostBuilder) =
     member __.Yield(_) =
       let errorHandler (ex : Exception) (logger : ILogger) =
         logger.LogError(EventId(), ex, "An unhandled exception has occurred while executing the request.")
@@ -90,8 +91,9 @@ module Application =
         state.ServicesConfig |> List.rev |> List.iter (fun fn -> fn services |> ignore)
 
       let wbhst =
-        // Explicit null removes unnecessary handlers.
-        WebHost.CreateDefaultBuilder(Option.toObj state.CliArguments)
+        match webHostBuilder with
+        | Some whb -> whb
+        | None -> WebHost.CreateDefaultBuilder(Option.toObj state.CliArguments)
         |> List.foldBack (fun e acc -> e acc ) state.HostConfigs
 
       wbhst.ConfigureServices(Action<IServiceCollection> serviceConfigs) |> ignore
@@ -522,6 +524,8 @@ module Application =
 
   ///Computation expression used to configure Saturn application
   let application = ApplicationBuilder()
+
+  let application' webHost = ApplicationBuilder(webHost)
 
   ///Runs Saturn application
   let run (app: IWebHostBuilder) =
